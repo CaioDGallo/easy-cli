@@ -1,0 +1,131 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            extension: .exe
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        mkdir -p dist
+        go build -ldflags="-s -w" -o dist/easy-cli-${{ matrix.suffix }}${{ matrix.extension }} .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: easy-cli-${{ matrix.suffix }}
+        path: dist/easy-cli-${{ matrix.suffix }}${{ matrix.extension }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist/
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          ## Changes
+          
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+          
+          ## Installation
+          
+          ### Linux/macOS
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/master/install.sh | bash
+          ```
+          
+          ### Manual Installation
+          1. Download the appropriate binary for your platform
+          2. Make it executable: `chmod +x easy-cli-*`
+          3. Move to your PATH: `mv easy-cli-* /usr/local/bin/easy-cli`
+        draft: false
+        prerelease: false
+
+    - name: Upload Linux AMD64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/easy-cli-linux-amd64/easy-cli-linux-amd64
+        asset_name: easy-cli-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Darwin AMD64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/easy-cli-darwin-amd64/easy-cli-darwin-amd64
+        asset_name: easy-cli-darwin-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Darwin ARM64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/easy-cli-darwin-arm64/easy-cli-darwin-arm64
+        asset_name: easy-cli-darwin-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows AMD64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/easy-cli-windows-amd64/easy-cli-windows-amd64.exe
+        asset_name: easy-cli-windows-amd64.exe
+        asset_content_type: application/octet-stream
